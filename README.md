@@ -1,116 +1,73 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Universal POS Core Service
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Core service POS (Point of Sale) berbasis **NestJS v11 + Prisma v6 + PostgreSQL** — agnostik model bisnis (Retail, F&B, Jasa). Diturunkan dari [`my-nestjs-template`](https://github.com/soerjo/my-nestjs-template). Frontend kasir: [`pos-ui`](https://github.com/soerjo/pos-ui).
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Fitur (implemented)
 
-## Description
+- **Shift & Cash Drawer** — open shift (1 shift aktif per kasir+toko), petty cash in/out, close shift dengan perhitungan kas ekspektasi + Z-Report (variance).
+- **Order lifecycle** — `DRAFT → HELD / PROCESSING → COMPLETED / CANCELLED / REFUNDED`; nomor order `POS-YYYYMMDD-XXXX` (sequence global harian); batch-replace item keranjang; semua kalkulasi uang (diskon, pajak, service charge, grand total) **dihitung ulang backend** dengan `Decimal` (bukan float).
+- **Payment** — `Idempotency-Key` header wajib (anti double-charge, replay-safe), split payment (Cash/EDC/Midtrans) — order `COMPLETED` saat `Σ payment SUCCESS ≥ grand total`, kembalian otomatis.
+- **Midtrans** — Snap charge (sandbox/production switch via env), webhook `/v1/webhooks/midtrans` dengan verifikasi `SHA512(order_id+status_code+gross_amount+serverKey)`.
+- **SSE real-time** — `GET /v1/orders/:id/payment-status/stream?token=<jwt>` (emit tiap 2 detik, auto-complete saat `COMPLETED`) + JSON helper `/payment-status`.
+- **Product catalog** — `v1/products` CRUD + search/category, soft delete (`isActive`), seed katalog default, unique `(storeId, sku)`.
+- **Transactional Outbox** — tabel `outbox_events` ditulis atomik dalam transaksi yang sama dengan transisi status untuk event `ORDER_COMPLETED` / `ORDER_REFUNDED`; relay worker polling (log-based) siap diganti Kafka.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Arsitektur integrasi (target)
 
-## Project setup
-
-```bash
-$ bun install
+```
+pos-ui (kasir) ──HTTPS──▶ pos-service ──outbox──▶ Kafka ──▶ WMS service
+                                   ▲                    │
+                                   └── Midtrans webhook ─┘
 ```
 
-## Compile and run the project
+## Setup
 
 ```bash
-# development
-$ bun run start
-
-# watch mode
-$ bun run start:dev
-
-# production mode
-$ bun run start:prod
+bun install
+cp .env.example .env          # isi DATABASE_URL, JWT secrets, MIDTRANS_SERVER_KEY
+bunx prisma migrate deploy
+bun run start:dev             # default :3000 (override via PORT)
 ```
 
-## Run tests
+Swagger UI: `http://localhost:<port>/docs` — Health: `GET /api/health` — Metrics: `GET /metrics`.
 
-```bash
-# unit tests
-$ bun run test
+## Environment penting
 
-# e2e tests
-$ bun run test:e2e
+| Variable | Wajib | Keterangan |
+| --- | --- | --- |
+| `DATABASE_URL` | ✅ | PostgreSQL connection string |
+| `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | ✅ | Signing token (payload pakai claim `id`, bukan `sub`) |
+| `MIDTRANS_SERVER_KEY` | ✅ | Server key Midtrans (`SB-…` untuk sandbox) |
+| `MIDTRANS_IS_PRODUCTION` | – | `false` → endpoint sandbox |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | ✅ | Legacy template auth (required oleh env validator) |
 
-# test coverage
-$ bun run test:cov
-```
+## Roadmap / TODO
 
-## Environment variables
+### 1. Outbox relay → Kafka (prioritas — infra oleh Dina)
+- [ ] Infra Kafka + dashboard **Kafbat** (repo terpisah, docker compose) — **assigned: Dina**
+- [ ] Ganti `OutboxRelayService` (log-based polling) dengan producer Kafka (`kafkajs`) di pos-service
+- [ ] Topik: `pos.order.completed`, `pos.order.refunded` (payload SKU + qty + storeId; consumer = WMS)
+- [ ] Delivery guarantee: tandai `outbox_events.status = PROCESSED` hanya setelah broker ack; consumer idempotent by `aggregate_id`
 
-Create a `.env` file (see `.env.example`) before running the app. Key variables:
+### 2. Pembayaran
+- [ ] Midtrans kredensial produksi (saat ini placeholder sandbox)
+- [ ] Handle `expiry`/`refund` notification secara eksplisit di webhook
+- [ ] Refund parsial + event `ORDER_REFUNDED` dari jalur pembayaran (bukan hanya endpoint manual)
 
-| Variable                 | Required | Default       | Description                                                                       |
-| ------------------------ | -------- | ------------- | --------------------------------------------------------------------------------- |
-| `NODE_ENV`               | No       | `development` | development \| production \| test                                                 |
-| `PORT`                   | No       | `3000`        | Server port                                                                       |
-| `DATABASE_URL`           | Yes      | —             | PostgreSQL connection string                                                      |
-| `JWT_ACCESS_SECRET`      | Yes      | —             | Signs access tokens                                                               |
-| `JWT_REFRESH_SECRET`     | Yes      | —             | Signs refresh tokens                                                              |
-| `JWT_ACCESS_EXPIRATION`  | No       | `15m`         | Access token expiry (`s`/`m`/`h`/`d` suffix, or bare seconds)                      |
-| `JWT_REFRESH_EXPIRATION` | No       | `7d`          | Refresh token expiry (`s`/`m`/`h`/`d` suffix, or bare seconds)                     |
-| `GOOGLE_CLIENT_ID`       | Yes      | —             | Google OAuth client ID                                                            |
-| `GOOGLE_CLIENT_SECRET`   | Yes      | —             | Google OAuth client secret                                                        |
-| `GOOGLE_CALLBACK_URL`    | No       | see `.env.example` | Google OAuth callback URL                                                    |
-| `FRONTEND_URL`           | No       | `http://localhost:5173` | Frontend base URL (Google OAuth redirect)                                |
-| `CORS_ORIGINS`           | No       | —             | Comma-separated allowed origins; unset/empty enables CORS for all origins (dev)   |
+### 3. Katalog & harga
+- [ ] Satuan konversi (pcs / pack / box) untuk Retail mode
+- [ ] Price list per store + promo engine (happy hour, bundled price)
 
-## Deployment
+### 4. Operasional
+- [ ] Report harian per shift/store (export CSV/Excel)
+- [ ] Audit log mutasi kas & refund (si, apa, kapan)
+- [ ] E2E test coverage (suite e2e saat ini hanya health check)
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+## Konvensi
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ bun install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+- Semua perubahan lewat PR ke `main` (squash-merge), feature branch `feat/*` / `fix/*`.
+- Gates: `bunx tsc --noEmit`, `bunx eslint` (check-only), `bun run build`, scoped jest `bunx jest <path> --config jest.config.js`.
+- Lihat `AGENTS.md` untuk command lengkap & arsitektur modul.
 
 ## License
 
