@@ -1,5 +1,6 @@
 import { plainToInstance } from 'class-transformer';
 import {
+  IsBoolean,
   IsEnum,
   IsNotEmpty,
   IsOptional,
@@ -58,6 +59,14 @@ class EnvironmentVariables {
   @IsString()
   @IsOptional()
   FRONTEND_URL: string = 'http://localhost:5173';
+
+  @IsString()
+  @IsNotEmpty()
+  MIDTRANS_SERVER_KEY!: string;
+
+  @IsBoolean()
+  @IsOptional()
+  MIDTRANS_IS_PRODUCTION: boolean = false;
 
   @IsString()
   @IsOptional()

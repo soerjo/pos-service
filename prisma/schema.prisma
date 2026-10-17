@@ -13,6 +13,53 @@ enum RoleName {
   USER
 }
 
+enum ShiftStatus {
+  OPEN
+  CLOSED
+}
+
+enum OrderStatus {
+  DRAFT
+  HELD
+  PROCESSING
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum OrderType {
+  RETAIL
+  DINE_IN
+  TAKEAWAY
+  SERVICE
+}
+
+enum PaymentMethod {
+  CASH
+  MIDTRANS_QRIS
+  MIDTRANS_GOPAY
+  MIDTRANS_VA
+  EDC_MANUAL
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  EXPIRED
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+enum CashMovementType {
+  IN
+  OUT
+}
+
 model User {
   id                    String   @id @default(uuid())
   email                 String   @unique
@@ -42,4 +89,124 @@ model Organization {
   users       User[]
 
   @@map("organizations")
+}
+
+model Shift {
+  id           String        @id @default(uuid())
+  userId       String        @map("user_id")
+  storeId      String        @map("store_id")
+  openedAt     DateTime      @default(now()) @map("opened_at")
+  closedAt     DateTime?     @map("closed_at")
+  openingCash  Decimal       @db.Decimal(15, 2) @map("opening_cash")
+  expectedCash Decimal?      @db.Decimal(15, 2) @map("expected_cash")
+  actualCash   Decimal?      @db.Decimal(15, 2) @map("actual_cash")
+  notes        String?
+  status       ShiftStatus   @default(OPEN)
+  orders       Order[]
+  cashMovements CashMovement[]
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  @@index([userId, status])
+  @@map("shifts")
+}
+
+model CashMovement {
+  id        String           @id @default(uuid())
+  shiftId   String           @map("shift_id")
+  shift     Shift            @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  type      CashMovementType
+  amount    Decimal          @db.Decimal(15, 2)
+  reason    String
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  @@index([shiftId])
+  @@map("cash_movements")
+}
+
+model Order {
+  id             String        @id @default(uuid())
+  orderNumber    String        @unique @map("order_number")
+  shiftId        String?       @map("shift_id")
+  shift          Shift?        @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  storeId        String        @map("store_id")
+  orderType      OrderType     @default(RETAIL) @map("order_type")
+  referenceTable String?       @map("reference_table")
+  status         OrderStatus   @default(DRAFT)
+  subtotal       Decimal       @default(0) @db.Decimal(15, 2)
+  discountAmount Decimal       @default(0) @db.Decimal(15, 2) @map("discount_amount")
+  taxAmount      Decimal       @default(0) @db.Decimal(15, 2) @map("tax_amount")
+  serviceCharge  Decimal       @default(0) @db.Decimal(15, 2) @map("service_charge")
+  grandTotal     Decimal       @default(0) @db.Decimal(15, 2) @map("grand_total")
+  items          OrderItem[]
+  payments       Payment[]
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  @@index([shiftId])
+  @@index([storeId, status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id              String              @id @default(uuid())
+  orderId         String              @map("order_id")
+  order           Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId       String              @map("product_id")
+  sku             String
+  productName     String              @map("product_name")
+  quantity        Int
+  unitPrice       Decimal             @db.Decimal(15, 2) @map("unit_price")
+  discountAmount  Decimal             @default(0) @db.Decimal(15, 2) @map("discount_amount")
+  subtotal        Decimal             @db.Decimal(15, 2)
+  isTrackStock    Boolean             @default(true) @map("is_track_stock")
+  notes           String?
+  assignedStaffId String?             @map("assigned_staff_id")
+  modifiers       OrderItemModifier[]
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model OrderItemModifier {
+  id           String    @id @default(uuid())
+  orderItemId  String    @map("order_item_id")
+  orderItem    OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  modifierName String    @map("modifier_name")
+  priceDelta   Decimal   @default(0) @db.Decimal(15, 2) @map("price_delta")
+
+  @@index([orderItemId])
+  @@map("order_item_modifiers")
+}
+
+model Payment {
+  id                    String        @id @default(uuid())
+  orderId               String        @map("order_id")
+  order                 Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  paymentMethod         PaymentMethod @map("payment_method")
+  amount                Decimal       @db.Decimal(15, 2)
+  cashReceived          Decimal?      @db.Decimal(15, 2) @map("cash_received")
+  cashChange            Decimal?      @db.Decimal(15, 2) @map("cash_change")
+  midtransTransactionId String?       @map("midtrans_transaction_id")
+  referenceNumber       String?       @map("reference_number")
+  status                PaymentStatus @default(PENDING)
+  idempotencyKey        String        @unique @map("idempotency_key") @db.VarChar(64)
+  createdAt             DateTime      @default(now()) @map("created_at")
+
+  @@index([orderId])
+  @@map("payments")
+}
+
+model OutboxEvent {
+  id            String       @id @default(uuid())
+  aggregateType String       @map("aggregate_type")
+  aggregateId   String       @map("aggregate_id")
+  eventType     String       @map("event_type")
+  payload       Json
+  status        OutboxStatus @default(PENDING)
+  processedAt   DateTime?    @map("processed_at")
+  createdAt     DateTime     @default(now()) @map("created_at")
+
+  @@index([status, createdAt])
+  @@map("outbox_events")
 }
