@@ -7,6 +7,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum ProductCategory {
+  FOOD_AND_BEVERAGE
+  RETAIL
+  SERVICE
+}
+
 enum RoleName {
   SYSTEM
   ADMIN
@@ -209,4 +215,34 @@ model OutboxEvent {
 
   @@index([status, createdAt])
   @@map("outbox_events")
+}
+
+model Product {
+  id String @id @default(uuid())
+  storeId String @map("store_id")
+  sku String
+  name String @map("name") // length 255
+  description String?
+  category ProductCategory @default(FOOD_AND_BEVERAGE)
+  price Decimal @db.Decimal(15, 2)
+  imageUrl String? @map("image_url")
+  isTrackStock Boolean @default(true) @map("is_track_stock")
+  isActive Boolean @default(true) @map("is_active")
+  modifiers ProductModifier[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@unique([storeId, sku])
+  @@index([storeId, isActive])
+  @@map("products")
+}
+
+model ProductModifier {
+  id String @id @default(uuid())
+  productId String @map("product_id")
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name String
+  priceDelta Decimal @default(0) @db.Decimal(15, 2) @map("price_delta")
+  createdAt DateTime @default(now()) @map("created_at")
+  @@index([productId])
+  @@map("product_modifiers")
 }

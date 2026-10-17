@@ -30,6 +30,34 @@ export class PaymentsService {
     return this.paymentsRepository.findByOrderId(orderId);
   }
 
+  async getPaymentStatus(orderId: string) {
+    const order = await this.ordersRepository.findById(orderId);
+    const successPayments = order.payments.filter(
+      (p) => p.status === PaymentStatus.SUCCESS,
+    );
+    let paidSoFar = new Decimal(0);
+    for (const p of successPayments) {
+      paidSoFar = paidSoFar.plus(p.amount);
+    }
+    const grandTotal = new Decimal(order.grandTotal);
+    const remaining = grandTotal.minus(paidSoFar);
+
+    return {
+      orderId: order.id,
+      paidSoFar: paidSoFar.toString(),
+      grandTotal: grandTotal.toString(),
+      remaining: remaining.toString(),
+      payments: order.payments.map((p) => ({
+        id: p.id,
+        method: p.paymentMethod,
+        status: p.status,
+        amount: p.amount.toString(),
+        midtransTransactionId: p.midtransTransactionId,
+      })),
+      orderStatus: order.status,
+    };
+  }
+
   async createPayment(
     orderId: string,
     idempotencyKey: string | undefined,
