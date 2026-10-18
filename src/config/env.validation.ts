@@ -71,6 +71,24 @@ class EnvironmentVariables {
   @IsString()
   @IsOptional()
   CORS_ORIGINS?: string;
+
+  // --- UMS JWT integration (RS256 public key verification) ---
+  @IsString()
+  @IsOptional()
+  UMS_JWT_PUBLIC_KEY?: string;
+
+  @IsString()
+  @IsOptional()
+  UMS_JWT_PUBLIC_KEY_PATH?: string;
+
+  // --- Kafka integration (outbox relay producer) ---
+  @IsString()
+  @IsOptional()
+  KAFKA_BROKERS?: string;
+
+  @IsString()
+  @IsOptional()
+  KAFKA_PRODUCER_DISABLED?: string;
 }
 
 export function validate(config: Record<string, unknown>) {
