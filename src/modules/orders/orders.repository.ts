@@ -97,6 +97,58 @@ export class OrdersRepository {
     });
   }
 
+  async findMany(query: {
+    storeId?: string;
+    status?: OrderStatus;
+    shiftId?: string;
+    startDate?: Date;
+    endDate?: Date;
+    page?: number;
+    limit?: number;
+  }) {
+    const page = query.page && query.page > 0 ? query.page : 1;
+    const limit = query.limit && query.limit > 0 ? query.limit : 20;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.OrderWhereInput = {};
+    if (query.storeId) where.storeId = query.storeId;
+    if (query.status) where.status = query.status;
+    if (query.shiftId) where.shiftId = query.shiftId;
+    if (query.startDate || query.endDate) {
+      where.createdAt = {};
+      if (query.startDate) where.createdAt.gte = query.startDate;
+      if (query.endDate) where.createdAt.lte = query.endDate;
+    }
+
+    const [items, total] = await Promise.all([
+      this.prisma.order.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          items: {
+            include: {
+              modifiers: true,
+            },
+          },
+          payments: true,
+        },
+      }),
+      this.prisma.order.count({ where }),
+    ]);
+
+    return {
+      items,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
   async deleteOrderItemsAndModifiers(
     orderId: string,
     tx: Prisma.TransactionClient,

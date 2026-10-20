@@ -266,6 +266,7 @@ export class OrdersService {
         orderId: order.id,
         orderNumber: order.orderNumber,
         storeId: order.storeId,
+        warehouseId: order.storeId,
         items: order.items.map((item) => ({
           sku: item.sku,
           productId: item.productId,
@@ -284,5 +285,29 @@ export class OrdersService {
 
       return updatedOrder;
     });
+  }
+
+  async getOrders(query: {
+    storeId?: string;
+    status?: OrderStatus;
+    shiftId?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    return this.ordersRepository.findMany({
+      storeId: query.storeId,
+      status: query.status,
+      shiftId: query.shiftId,
+      startDate: query.startDate ? new Date(query.startDate) : undefined,
+      endDate: query.endDate ? new Date(query.endDate) : undefined,
+      page: query.page,
+      limit: query.limit,
+    });
+  }
+
+  async getOrderById(id: string) {
+    return this.ordersRepository.findById(id);
   }
 }

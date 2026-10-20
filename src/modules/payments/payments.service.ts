@@ -217,6 +217,7 @@ export class PaymentsService {
             orderId: order.id,
             orderNumber: order.orderNumber,
             storeId: order.storeId,
+            warehouseId: order.storeId,
             items: itemsPayload,
           },
           tx,
