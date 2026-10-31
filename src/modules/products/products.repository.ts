@@ -46,7 +46,7 @@ export class ProductsRepository {
     });
   }
 
-  async findById(id: string) {
+  async findById(id: string, storeId?: string) {
     const product = await this.prisma.product.findUnique({
       where: { id },
       include: {
@@ -56,10 +56,21 @@ export class ProductsRepository {
     if (!product) {
       throw new NotFoundException(`Product with id ${id} not found`);
     }
+    if (storeId && product.storeId !== storeId) {
+      throw new NotFoundException(
+        `Product with id ${id} does not belong to store ${storeId}`,
+      );
+    }
     return product;
   }
 
   async create(dto: CreateProductDto) {
+    const store = await this.prisma.store.findUnique({
+      where: { id: dto.storeId },
+    });
+    if (!store) {
+      throw new NotFoundException(`Store with id '${dto.storeId}' not found`);
+    }
     const { modifiers, ...productData } = dto;
     try {
       return await this.prisma.product.create({
@@ -91,8 +102,8 @@ export class ProductsRepository {
     }
   }
 
-  async update(id: string, dto: UpdateProductDto) {
-    await this.findById(id);
+  async update(id: string, dto: UpdateProductDto, storeId?: string) {
+    await this.findById(id, storeId);
     const { modifiers, ...productData } = dto;
 
     try {
@@ -134,8 +145,8 @@ export class ProductsRepository {
     }
   }
 
-  async softDelete(id: string) {
-    await this.findById(id);
+  async softDelete(id: string, storeId?: string) {
+    await this.findById(id, storeId);
     return this.prisma.product.update({
       where: { id },
       data: { isActive: false },
@@ -155,6 +166,7 @@ export class ProductsRepository {
       price: number;
       isTrackStock?: boolean;
       isActive?: boolean;
+      imageUrl?: string;
       modifiers?: { name: string; priceDelta: number }[];
     },
   ) {
@@ -165,7 +177,30 @@ export class ProductsRepository {
     const { modifiers, ...productData } = data;
 
     if (existing) {
-      return existing;
+      return this.prisma.$transaction(async (tx) => {
+        if (modifiers) {
+          await tx.productModifier.deleteMany({
+            where: { productId: existing.id },
+          });
+        }
+        return tx.product.update({
+          where: { id: existing.id },
+          data: {
+            ...productData,
+            modifiers: modifiers
+              ? {
+                  create: modifiers.map((mod) => ({
+                    name: mod.name,
+                    priceDelta: mod.priceDelta,
+                  })),
+                }
+              : undefined,
+          },
+          include: {
+            modifiers: true,
+          },
+        });
+      });
     }
 
     return this.prisma.product.create({

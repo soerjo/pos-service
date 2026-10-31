@@ -124,20 +124,20 @@ export class ProductsService {
     );
   }
 
-  async findById(id: string) {
-    return this.productsRepository.findById(id);
+  async findById(id: string, storeId?: string) {
+    return this.productsRepository.findById(id, storeId);
   }
 
   async create(dto: CreateProductDto) {
     return this.productsRepository.create(dto);
   }
 
-  async update(id: string, dto: UpdateProductDto) {
-    return this.productsRepository.update(id, dto);
+  async update(id: string, dto: UpdateProductDto, storeId?: string) {
+    return this.productsRepository.update(id, dto, storeId);
   }
 
-  async softDelete(id: string) {
-    return this.productsRepository.softDelete(id);
+  async softDelete(id: string, storeId?: string) {
+    return this.productsRepository.softDelete(id, storeId);
   }
 
   async seed(storeId: string) {
