@@ -15,6 +15,7 @@ import { PaymentsModule } from './modules/payments/payments.module.js';
 import { OutboxModule } from './modules/outbox/outbox.module.js';
 import { WebhooksModule } from './modules/webhooks/webhooks.module.js';
 import { ProductsModule } from './modules/products/products.module.js';
+import { StoresModule } from './modules/stores/stores.module.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { RolesGuard } from './common/guards/roles.guard.js';
 import { loggerConfig } from './config/logger.config.js';
@@ -39,6 +40,7 @@ import { InterServiceHttpClientModule } from './common/http-client/http-client.m
     OutboxModule,
     WebhooksModule,
     ProductsModule,
+    StoresModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

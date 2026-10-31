@@ -93,14 +93,34 @@ model Organization {
   updatedAt   DateTime @updatedAt
 
   users       User[]
-
+  stores      Store[]
   @@map("organizations")
+}
+
+model Store {
+  id             String       @id @default(uuid())
+  code           String
+  name           String
+  organizationId String       @map("organization_id")
+  isActive       Boolean      @default(true) @map("is_active")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  shifts         Shift[]
+  orders         Order[]
+  products       Product[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("stores")
 }
 
 model Shift {
   id           String        @id @default(uuid())
   userId       String        @map("user_id")
   storeId      String        @map("store_id")
+  store        Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
   openedAt     DateTime      @default(now()) @map("opened_at")
   closedAt     DateTime?     @map("closed_at")
   openingCash  Decimal       @db.Decimal(15, 2) @map("opening_cash")
@@ -113,6 +133,7 @@ model Shift {
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @updatedAt @map("updated_at")
 
+  @@index([storeId])
   @@index([userId, status])
   @@map("shifts")
 }
@@ -136,6 +157,7 @@ model Order {
   shiftId        String?       @map("shift_id")
   shift          Shift?        @relation(fields: [shiftId], references: [id], onDelete: SetNull)
   storeId        String        @map("store_id")
+  store          Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
   orderType      OrderType     @default(RETAIL) @map("order_type")
   referenceTable String?       @map("reference_table")
   status         OrderStatus   @default(DRAFT)
@@ -220,6 +242,7 @@ model OutboxEvent {
 model Product {
   id String @id @default(uuid())
   storeId String @map("store_id")
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
   sku String
   name String @map("name") // length 255
   description String?

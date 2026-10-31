@@ -89,6 +89,11 @@ class EnvironmentVariables {
   @IsString()
   @IsOptional()
   KAFKA_PRODUCER_DISABLED?: string;
+
+  // --- ERP Core Service integration ---
+  @IsString()
+  @IsOptional()
+  ERP_SERVICE_URL?: string;
 }
 
 export function validate(config: Record<string, unknown>) {
